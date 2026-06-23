@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-pickle-green: #0faf52;
+  --color-pickle-orange: #ee6e2b;
+  --color-pickle-cream: #e1dbd8;
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+}

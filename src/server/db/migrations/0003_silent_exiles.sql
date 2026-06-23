@@ -1,0 +1,1 @@
+ALTER TABLE `stack_queue` ADD `group_id` text;
