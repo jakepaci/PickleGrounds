@@ -8,6 +8,7 @@ import { reshuffleDeck } from '../services/deck-matchmaker.js';
 import {
   lockStackGroup,
   moveDeckGroup,
+  moveDeckGroupToIndex,
   removePlayerFromStack,
   reorderStackPlayer,
   unlockStackGroup,
@@ -108,6 +109,29 @@ export async function playerRoutes(app: FastifyInstance) {
       }
       try {
         moveDeckGroup(groupIndex, direction);
+        broadcastState();
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to move group';
+        return reply.code(400).send({ error: message });
+      }
+    },
+  );
+
+  app.post<{ Body: { fromGroupIndex: number; toGroupIndex: number } }>(
+    '/api/stack/move-group-to',
+    async (req, reply) => {
+      const { fromGroupIndex, toGroupIndex } = req.body;
+      if (
+        typeof fromGroupIndex !== 'number' ||
+        typeof toGroupIndex !== 'number' ||
+        fromGroupIndex < 0 ||
+        toGroupIndex < 0
+      ) {
+        return reply.code(400).send({ error: 'fromGroupIndex and toGroupIndex required' });
+      }
+      try {
+        moveDeckGroupToIndex(fromGroupIndex, toGroupIndex);
         broadcastState();
         return { ok: true };
       } catch (err) {

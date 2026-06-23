@@ -153,16 +153,24 @@ function CourtCard({ court }: { court: Court }) {
   }
 
   return (
-    <div className="rounded-lg border border-pickle-green/25 bg-pickle-green/5 p-4">
+    <div
+      className={`rounded-lg border p-4 ${
+        court.status === 'Occupied'
+          ? 'border-pickle-green/30 bg-pickle-green/5'
+          : court.status === 'Reserved'
+            ? 'border-pickle-orange/35 bg-pickle-orange/5'
+            : 'border-black/10 bg-white'
+      }`}
+    >
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-lg text-black uppercase tracking-wide">Court {court.id}</h3>
         <span
-          className={`text-xs uppercase font-bold px-2 py-1 rounded ${
+          className={`text-xs uppercase font-bold px-2 py-1 rounded border ${
             court.status === 'Occupied'
-              ? 'bg-pickle-green/15 text-pickle-green'
+              ? 'bg-pickle-green/15 text-pickle-green border-pickle-green/30'
               : court.status === 'Reserved'
-                ? 'bg-pickle-orange/15 text-pickle-orange'
-                : 'bg-black/10 text-black/50'
+                ? 'bg-pickle-orange/15 text-pickle-orange border-pickle-orange/35'
+                : 'bg-black/10 text-black/50 border-black/15'
           }`}
         >
           {court.status}

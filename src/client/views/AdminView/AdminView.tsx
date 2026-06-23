@@ -42,9 +42,11 @@ export function AdminView() {
         </div>
       </header>
 
-      <main className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4 max-w-[1600px] mx-auto">
+      <main className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4 max-w-[1600px] mx-auto xl:items-stretch">
         <PlayerPanel />
-        <StackPanel />
+        <div className="flex flex-col min-h-0 xl:h-full">
+          <StackPanel />
+        </div>
         <div className="xl:col-span-2">
           <CourtPanel />
         </div>

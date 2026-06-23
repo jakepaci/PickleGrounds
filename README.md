@@ -4,7 +4,7 @@ Local pickleball facility management — court stacks, timers, and simple financ
 
 ## Prerequisites
 
-- **Node.js 20+** (you have v22)
+- **Node.js 20+** (including current LTS and v26)
 
 ## Quick start
 

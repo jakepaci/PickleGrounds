@@ -13,8 +13,8 @@ type SkillFilter = 'all' | SkillCategory;
 const skillBadgeClass: Record<SkillCategory, string> = {
   Beginner: 'bg-pickle-green/12 text-pickle-green border-pickle-green/25',
   Novice: 'bg-sky-100 text-sky-800 border-sky-200',
-  Intermediate: 'bg-pickle-orange/12 text-pickle-orange border-pickle-orange/30',
-  Expert: 'bg-black/8 text-black/75 border-black/15',
+  Intermediate: 'bg-pickle-orange/12 text-pickle-orange border-pickle-orange/40',
+  Expert: 'bg-violet-100 text-violet-800 border-violet-200',
 };
 
 export function PlayerPanel() {
@@ -270,14 +270,16 @@ function PlayerRow({
       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
         onCourt
           ? 'bg-pickle-green/8 border-pickle-green/30'
-          : player.paid
-            ? 'bg-pickle-green/10 border-pickle-green/35'
-            : 'bg-white border-black/10'
+          : inStack
+            ? 'bg-pickle-orange/8 border-pickle-orange/35'
+            : player.paid
+              ? 'bg-pickle-green/10 border-pickle-green/35'
+              : 'bg-white border-black/10'
       }`}
     >
       <span
         className={`w-2 h-2 rounded-full shrink-0 ${
-          onCourt ? 'bg-pickle-green' : player.paid ? 'bg-pickle-green' : 'bg-black/25'
+          onCourt ? 'bg-pickle-green' : inStack ? 'bg-pickle-orange' : player.paid ? 'bg-pickle-green' : 'bg-black/25'
         }`}
       />
       <div className="flex-1 min-w-0">
@@ -329,7 +331,7 @@ function PlayerRow({
                 ? 'Already in the deck'
                 : 'Add to deck'
           }
-          className="px-2 py-0.5 rounded bg-pickle-orange hover:bg-pickle-orange/90 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium text-white"
+          className="px-2 py-0.5 rounded bg-pickle-orange hover:bg-pickle-orange/90 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium text-white border border-pickle-orange"
         >
           + Stack
         </button>

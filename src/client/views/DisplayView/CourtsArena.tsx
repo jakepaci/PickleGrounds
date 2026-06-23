@@ -1,7 +1,7 @@
-import type { Court } from '../../../shared/types';
-import { MATCH_DURATION_MS } from '../../../shared/constants';
-import { CourtVisualizer, FLOOR_CLIP } from './CourtVisualizer';
-import { formatTime } from './displayUtils';
+import type { Court } from "../../../shared/types";
+import { MATCH_DURATION_MS } from "../../../shared/constants";
+import { CourtVisualizer, FLOOR_CLIP } from "./CourtVisualizer";
+import { formatTime } from "./displayUtils";
 
 interface CourtsArenaProps {
   courts: (Court | null)[];
@@ -12,10 +12,15 @@ export function CourtsArena({ courts }: CourtsArenaProps) {
   return (
     <main className="flex-1 min-h-0 px-2 sm:px-3 pb-2 bg-[#E1DBD8] flex flex-col font-sans">
       <div className="flex-1 min-h-0 flex flex-col [filter:drop-shadow(0_14px_36px_rgba(0,0,0,0.14))]">
+        {/* Orange separator — full width above court labels */}
+        <div className="shrink-0 mb-2 -mx-2 sm:-mx-3">
+          <div className="h-1 bg-[#0FAF52]" aria-hidden />
+        </div>
+
         {/* Court names — outside trapezoid, aligned to column centers */}
         <div
           className="shrink-0 grid grid-cols-3 mb-1.5"
-          style={{ paddingInline: '2.5%' }}
+          style={{ paddingInline: "2.5%" }}
         >
           {courts.map((court, i) => (
             <CourtLabel
@@ -54,20 +59,24 @@ function CourtLabel({ courtNumber }: { courtNumber: 1 | 2 | 3 }) {
 }
 
 function CourtGraphic({ court }: { court: Court }) {
-  const isOccupied = court.status === 'Occupied';
+  const isOccupied = court.status === "Occupied";
   const timerStarted = court.timerStarted;
   const display =
     isOccupied && timerStarted
       ? formatTime(court.secondsRemaining)
       : isOccupied
         ? `${formatTime(MATCH_DURATION_MS / 1000)} · READY`
-        : '15:00';
+        : "15:00";
 
   return (
     <div className="h-full min-h-0 w-full min-w-0 px-[1.5%] flex flex-col">
       <CourtVisualizer
         players={court.players}
-        timer={court.timerPaused ? `${formatTime(court.secondsRemaining)} · PAUSED` : display}
+        timer={
+          court.timerPaused
+            ? `${formatTime(court.secondsRemaining)} · PAUSED`
+            : display
+        }
         className="block w-full h-full flex-1 min-h-0"
       />
     </div>

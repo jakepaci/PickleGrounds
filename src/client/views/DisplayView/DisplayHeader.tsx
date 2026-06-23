@@ -10,10 +10,10 @@ export function DisplayHeader({ activeCourts, deckGroups, connected }: DisplayHe
   return (
     <header className="shrink-0 flex items-end justify-between gap-8 px-10 pt-5 pb-3 bg-[#E1DBD8] font-sans">
       <div>
-        <p className="text-[#EE6E2B] text-[11px] font-semibold uppercase tracking-[0.3em] mb-1.5 font-sans">
+        <p className="text-pickle-orange text-[11px] font-semibold uppercase tracking-[0.3em] mb-1.5 font-sans">
           Open Play · Live
         </p>
-        <h1 className="font-display text-[2.75rem] xl:text-[3.25rem] 2xl:text-[3.75rem] font-black text-[#0FAF52] tracking-tighter leading-[0.92]">
+        <h1 className="font-display text-[2.75rem] xl:text-[3.25rem] 2xl:text-[3.75rem] font-black text-pickle-green tracking-tighter leading-[0.92]">
           The Pickle Grounds
         </h1>
       </div>
@@ -25,11 +25,11 @@ export function DisplayHeader({ activeCourts, deckGroups, connected }: DisplayHe
         <div
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] ${
             connected
-              ? 'bg-[#0FAF52]/15 text-[#0FAF52]'
-              : 'bg-red-100 text-red-600 animate-pulse'
+              ? 'bg-pickle-green/15 text-pickle-green border border-pickle-green/30'
+              : 'bg-red-100 text-red-600 border border-red-200 animate-pulse'
           }`}
         >
-          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-[#0FAF52]' : 'bg-red-500'}`} />
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-pickle-green' : 'bg-red-500'}`} />
           {connected ? 'Live' : 'Reconnecting'}
         </div>
       </div>

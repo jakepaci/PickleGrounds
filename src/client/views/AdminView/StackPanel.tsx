@@ -12,9 +12,10 @@ const panelClass = 'bg-white rounded-lg border border-black/10 p-4 shadow-sm';
 export function StackPanel() {
   const stack = useAppStore((s) => s.state.stack);
   const groups = useMemo(() => chunkIntoGroups(stack), [stack]);
-  const groupCount = groups.length;
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
+  const [draggingGroupIndex, setDraggingGroupIndex] = useState<number | null>(null);
+  const [dragOverGroupIndex, setDragOverGroupIndex] = useState<number | null>(null);
   const [keepTogetherDialog, setKeepTogetherDialog] = useState<
     | { kind: 'confirm'; playerIds: string[]; tiers: string }
     | { kind: 'notice'; message: string }
@@ -29,11 +30,15 @@ export function StackPanel() {
     }
   }
 
-  async function moveGroup(index: number, direction: 'up' | 'down') {
+  async function reorderGroup(fromGroupIndex: number, toGroupIndex: number) {
+    if (fromGroupIndex === toGroupIndex) return;
     try {
-      await api.post('/api/stack/move-group', { groupIndex: index, direction });
+      await api.post('/api/stack/move-group-to', { fromGroupIndex, toGroupIndex });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to move group');
+    } finally {
+      setDraggingGroupIndex(null);
+      setDragOverGroupIndex(null);
     }
   }
 
@@ -98,8 +103,8 @@ export function StackPanel() {
     const filled = groupPlayers.filter(Boolean);
     const groupIds = filled.map((p) => p.stackGroupId).filter(Boolean);
     const isLocked =
-      filled.length === 4 &&
-      groupIds.length === 4 &&
+      filled.length === PLAYERS_PER_COURT &&
+      groupIds.length === PLAYERS_PER_COURT &&
       groupIds.every((id) => id === groupIds[0]);
     return {
       isLocked,
@@ -109,8 +114,7 @@ export function StackPanel() {
 
   return (
     <section
-      className={`${panelClass} flex flex-col overflow-hidden`}
-      style={{ height: 'min(420px, calc(100vh - 14rem))' }}
+      className={`${panelClass} flex flex-col overflow-hidden h-full min-h-[min(420px,calc(100vh-14rem))]`}
     >
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 className="text-lg font-semibold text-black">Stack Queue</h2>
@@ -122,12 +126,12 @@ export function StackPanel() {
       </div>
 
       <p className="text-xs text-black/45 mb-3 shrink-0">
-        Drag a name onto another slot to reorder. Use ↑↓ for whole groups. Lock a full group of 4 to
-        keep friends together through reshuffles.
+        Drag the ⋮⋮ handle on a group card to reorder whole groups. Drag player names to move
+        individuals. Lock a full group of 4 to keep friends together through reshuffles.
       </p>
 
       {stack.length === 0 ? (
-        <p className="text-black/45 text-sm">Queue is empty. Add players from the roster.</p>
+        <p className="text-black/45 text-sm flex-1">Queue is empty. Add players from the roster.</p>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain -mx-1 px-1 pb-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -141,15 +145,18 @@ export function StackPanel() {
                   baseStackIndex={index * PLAYERS_PER_COURT}
                   layout="admin"
                   onRemovePlayer={removeFromStack}
-                  onMoveGroup={moveGroup}
+                  onReorderGroup={reorderGroup}
+                  draggingGroupIndex={draggingGroupIndex}
+                  onDragGroupStart={setDraggingGroupIndex}
+                  onDragGroupEnd={() => setDraggingGroupIndex(null)}
+                  dragOverGroupIndex={dragOverGroupIndex}
+                  onDragOverGroupIndex={setDragOverGroupIndex}
                   onReorderPlayer={reorderPlayer}
                   draggingPlayerId={draggingPlayerId}
                   onDragPlayerStart={setDraggingPlayerId}
                   onDragPlayerEnd={() => setDraggingPlayerId(null)}
                   dragOverIndex={dragOverIndex}
                   onDragOverIndex={setDragOverIndex}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < groupCount - 1}
                   isLocked={isLocked}
                   stackGroupId={stackGroupId}
                   onKeepTogether={keepTogether}

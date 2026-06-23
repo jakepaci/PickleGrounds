@@ -91,6 +91,31 @@ export function moveDeckGroup(groupIndex: number, direction: 'up' | 'down') {
   rebuildStackQueue(rebuilt.map((r) => ({ playerId: r.playerId, groupId: r.groupId })));
 }
 
+/** Move an entire deck group to a new position in the queue (0-based group index). */
+export function moveDeckGroupToIndex(fromGroupIndex: number, toGroupIndex: number) {
+  const rows = getOrderedStackRows();
+  if (rows.length === 0) return;
+
+  const groups: StackRow[][] = [];
+  for (let i = 0; i < rows.length; i += PLAYERS_PER_COURT) {
+    groups.push(rows.slice(i, Math.min(i + PLAYERS_PER_COURT, rows.length)));
+  }
+
+  if (fromGroupIndex < 0 || fromGroupIndex >= groups.length) {
+    throw new Error('Invalid source group');
+  }
+  if (toGroupIndex < 0 || toGroupIndex >= groups.length) {
+    throw new Error('Invalid target group');
+  }
+  if (fromGroupIndex === toGroupIndex) return;
+
+  const [moved] = groups.splice(fromGroupIndex, 1);
+  groups.splice(toGroupIndex, 0, moved!);
+
+  const rebuilt = groups.flat();
+  rebuildStackQueue(rebuilt.map((r) => ({ playerId: r.playerId, groupId: r.groupId })));
+}
+
 export function lockStackGroup(playerIds: string[]) {
   if (playerIds.length !== PLAYERS_PER_COURT) {
     throw new Error(`Need exactly ${PLAYERS_PER_COURT} players`);

@@ -9,8 +9,13 @@ interface DeckGroupCardProps {
   baseStackIndex?: number;
   /** Admin: remove a player from the queue */
   onRemovePlayer?: (playerId: string) => void;
-  /** Admin: move this group up/down in the queue */
-  onMoveGroup?: (index: number, direction: 'up' | 'down') => void;
+  /** Admin: drag a whole group to a new queue position */
+  onReorderGroup?: (fromGroupIndex: number, toGroupIndex: number) => void;
+  draggingGroupIndex?: number | null;
+  onDragGroupStart?: (groupIndex: number) => void;
+  onDragGroupEnd?: () => void;
+  dragOverGroupIndex?: number | null;
+  onDragOverGroupIndex?: (groupIndex: number | null) => void;
   /** Admin: drag player to a new stack position */
   onReorderPlayer?: (playerId: string, toIndex: number) => void;
   draggingPlayerId?: string | null;
@@ -18,8 +23,6 @@ interface DeckGroupCardProps {
   onDragPlayerEnd?: () => void;
   dragOverIndex?: number | null;
   onDragOverIndex?: (index: number | null) => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
   /** Admin: lock/unlock foursome */
   isLocked?: boolean;
   stackGroupId?: string | null;
@@ -29,20 +32,26 @@ interface DeckGroupCardProps {
   layout?: 'display' | 'admin';
 }
 
+const PLAYER_MIME = 'application/x-picklegrounds-player';
+const GROUP_MIME = 'application/x-picklegrounds-group';
+
 export function DeckGroupCard({
   players,
   index,
   baseStackIndex = index * PLAYERS_PER_COURT,
   onRemovePlayer,
-  onMoveGroup,
+  onReorderGroup,
+  draggingGroupIndex = null,
+  onDragGroupStart,
+  onDragGroupEnd,
+  dragOverGroupIndex = null,
+  onDragOverGroupIndex,
   onReorderPlayer,
   draggingPlayerId = null,
   onDragPlayerStart,
   onDragPlayerEnd,
   dragOverIndex = null,
   onDragOverIndex,
-  canMoveUp = false,
-  canMoveDown = false,
   isLocked = false,
   stackGroupId,
   onKeepTogether,
@@ -55,28 +64,34 @@ export function DeckGroupCard({
   const filledPlayers = players.filter(Boolean);
   const canKeepTogether =
     isAdmin && filledPlayers.length === 4 && !isLocked && onKeepTogether;
-  const canDrag = isAdmin && Boolean(onReorderPlayer);
+  const canDragGroup = isAdmin && Boolean(onReorderGroup);
+  const canDragPlayer = isAdmin && Boolean(onReorderPlayer);
+  const isDraggingGroup = draggingGroupIndex === index;
+  const isGroupDropTarget = dragOverGroupIndex === index && draggingGroupIndex !== index;
 
-  function handleDragStart(e: React.DragEvent, playerId: string) {
+  function handlePlayerDragStart(e: React.DragEvent, playerId: string) {
     e.dataTransfer.setData('text/plain', playerId);
-    e.dataTransfer.setData('application/x-picklegrounds-player', playerId);
+    e.dataTransfer.setData(PLAYER_MIME, playerId);
     e.dataTransfer.effectAllowed = 'move';
     onDragPlayerStart?.(playerId);
   }
 
-  function handleDragOver(e: React.DragEvent, stackIndex: number) {
-    if (!canDrag) return;
+  function handlePlayerDragOver(e: React.DragEvent, stackIndex: number) {
+    if (!canDragPlayer) return;
+    if (e.dataTransfer.types.includes(GROUP_MIME)) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     onDragOverIndex?.(stackIndex);
   }
 
-  function handleDrop(e: React.DragEvent, toIndex: number) {
-    if (!canDrag || !onReorderPlayer) return;
+  function handlePlayerDrop(e: React.DragEvent, toIndex: number) {
+    if (!canDragPlayer || !onReorderPlayer) return;
+    if (e.dataTransfer.types.includes(GROUP_MIME)) return;
     e.preventDefault();
     e.stopPropagation();
     const playerId =
-      e.dataTransfer.getData('application/x-picklegrounds-player') ||
+      e.dataTransfer.getData(PLAYER_MIME) ||
       e.dataTransfer.getData('text/plain') ||
       draggingPlayerId ||
       '';
@@ -84,22 +99,70 @@ export function DeckGroupCard({
     if (playerId) onReorderPlayer(playerId, toIndex);
   }
 
-  function handleDragEnd() {
+  function handlePlayerDragEnd() {
     onDragOverIndex?.(null);
     onDragPlayerEnd?.();
   }
 
+  function handleGroupDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData(GROUP_MIME, String(index));
+    e.dataTransfer.effectAllowed = 'move';
+    onDragGroupStart?.(index);
+  }
+
+  function handleGroupDragOver(e: React.DragEvent) {
+    if (!canDragGroup || draggingGroupIndex === index) return;
+    if (!e.dataTransfer.types.includes(GROUP_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    onDragOverGroupIndex?.(index);
+  }
+
+  function handleGroupDrop(e: React.DragEvent) {
+    if (!canDragGroup || !onReorderGroup) return;
+    const from = e.dataTransfer.getData(GROUP_MIME);
+    if (!from) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onDragOverGroupIndex?.(null);
+    onReorderGroup(Number(from), index);
+  }
+
+  function handleGroupDragEnd() {
+    onDragOverGroupIndex?.(null);
+    onDragGroupEnd?.();
+  }
+
+  function borderClass() {
+    if (isGroupDropTarget) return 'border-2 border-pickle-green';
+    if (isLocked) return 'border-pickle-green/40';
+    if (isNext) return 'border-2 border-pickle-orange';
+    return isAdmin ? 'border-black/10' : 'border-black/[0.08]';
+  }
+
   return (
     <article
+      onDragOver={handleGroupDragOver}
+      onDragLeave={
+        canDragGroup
+          ? (e) => {
+              if (
+                dragOverGroupIndex === index &&
+                !e.currentTarget.contains(e.relatedTarget as Node)
+              ) {
+                onDragOverGroupIndex?.(null);
+              }
+            }
+          : undefined
+      }
+      onDrop={handleGroupDrop}
       className={
         isAdmin
-          ? `min-w-0 w-full bg-white rounded-2xl p-4 flex flex-col gap-2.5 shadow-[0_4px_14px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.06] ${
-              isNext
-                ? 'ring-2 ring-pickle-orange ring-offset-2 ring-offset-white'
-                : ''
-            } ${isLocked ? 'ring-1 ring-pickle-green/40' : ''}`
-          : `shrink-0 w-60 xl:w-64 2xl:w-72 bg-white rounded-2xl p-5 flex flex-col gap-3 shadow-[0_6px_20px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.05] ${
-              isNext ? 'ring-2 ring-pickle-orange ring-offset-2 ring-offset-[#E1DBD8]' : ''
+          ? `w-full bg-white rounded-2xl p-4 flex flex-col gap-2.5 shadow-[0_4px_14px_rgba(0,0,0,0.06)] border ${
+              isDraggingGroup ? 'opacity-55 shadow-lg' : ''
+            } ${borderClass()}`
+          : `shrink-0 w-64 xl:w-72 2xl:w-80 bg-white rounded-2xl p-5 flex flex-col gap-3 shadow-[0_6px_20px_rgba(0,0,0,0.07)] border ${
+              isNext ? 'border-2 border-pickle-orange' : 'border-black/[0.08]'
             }`
       }
     >
@@ -126,27 +189,17 @@ export function DeckGroupCard({
           )}
         </div>
 
-        {isAdmin && onMoveGroup && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onMoveGroup(index, 'up')}
-              disabled={!canMoveUp}
-              className="w-7 h-7 rounded bg-black/8 hover:bg-black/15 disabled:opacity-30 text-xs font-bold"
-              title="Move group up"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => onMoveGroup(index, 'down')}
-              disabled={!canMoveDown}
-              className="w-7 h-7 rounded bg-black/8 hover:bg-black/15 disabled:opacity-30 text-xs font-bold"
-              title="Move group down"
-            >
-              ↓
-            </button>
-          </div>
+        {canDragGroup && (
+          <span
+            draggable
+            onDragStart={handleGroupDragStart}
+            onDragEnd={handleGroupDragEnd}
+            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-black/6 hover:bg-black/10 text-black/35 text-xs select-none cursor-grab active:cursor-grabbing"
+            title="Drag group to reorder"
+            aria-label={`Drag ${label} to reorder`}
+          >
+            ⋮⋮
+          </span>
         )}
       </div>
 
@@ -170,31 +223,31 @@ export function DeckGroupCard({
         </button>
       )}
 
-      <ul className={isAdmin ? 'space-y-1.5' : 'space-y-2.5'}>
+      <ul className={isAdmin ? 'space-y-1.5' : 'space-y-3'}>
         {Array.from({ length: 4 }, (_, i) => {
           const player = players[i];
           const stackIndex = baseStackIndex + i;
-          const isDropTarget = canDrag && player && dragOverIndex === stackIndex;
+          const isDropTarget = canDragPlayer && player && dragOverIndex === stackIndex;
           return (
             <li
               key={player?.id ?? `empty-${i}`}
               className={`flex items-center gap-2 min-w-0 rounded-md transition-colors ${
                 isDropTarget ? 'bg-pickle-green/15 ring-1 ring-pickle-green/40' : ''
-              } ${canDrag && player ? 'cursor-grab active:cursor-grabbing' : ''}`}
-              draggable={canDrag && Boolean(player)}
-              onDragStart={player ? (e) => handleDragStart(e, player.id) : undefined}
-              onDragOver={player ? (e) => handleDragOver(e, stackIndex) : undefined}
+              } ${canDragPlayer && player ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              draggable={canDragPlayer && Boolean(player)}
+              onDragStart={player ? (e) => handlePlayerDragStart(e, player.id) : undefined}
+              onDragOver={player ? (e) => handlePlayerDragOver(e, stackIndex) : undefined}
               onDragLeave={
-                canDrag && player
+                canDragPlayer && player
                   ? () => {
                       if (dragOverIndex === stackIndex) onDragOverIndex?.(null);
                     }
                   : undefined
               }
-              onDrop={player ? (e) => handleDrop(e, stackIndex) : undefined}
-              onDragEnd={canDrag ? handleDragEnd : undefined}
+              onDrop={player ? (e) => handlePlayerDrop(e, stackIndex) : undefined}
+              onDragEnd={canDragPlayer ? handlePlayerDragEnd : undefined}
             >
-              {canDrag && player && (
+              {canDragPlayer && player && (
                 <span
                   className="shrink-0 text-black/25 text-xs select-none"
                   aria-hidden
@@ -204,13 +257,13 @@ export function DeckGroupCard({
                 </span>
               )}
               <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                className={`w-2 h-2 rounded-full shrink-0 ${
                   player ? 'bg-pickle-green' : 'bg-black/12'
                 }`}
               />
               <span
                 className={`min-w-0 flex-1 truncate font-semibold ${
-                  isAdmin ? 'text-sm' : 'text-base xl:text-lg font-bold'
+                  isAdmin ? 'text-sm' : 'text-lg xl:text-xl 2xl:text-2xl font-bold'
                 } ${player ? 'text-black' : 'text-black/25'}`}
               >
                 {player?.name ?? 'Open slot'}
