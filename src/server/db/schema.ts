@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
 
 const skillCategories = ['Beginner', 'Novice', 'Intermediate', 'Expert'] as const;
 const courtStatuses = ['Reserved', 'Occupied', 'Idle'] as const;
@@ -30,13 +30,17 @@ export const courtPlayers = sqliteTable('court_players', {
   playerId: text('player_id').references(() => players.id),
 });
 
-export const stackQueue = sqliteTable('stack_queue', {
-  position: integer('position').primaryKey(),
-  playerId: text('player_id')
-    .notNull()
-    .references(() => players.id),
-  groupId: text('group_id'),
-});
+export const stackQueue = sqliteTable(
+  'stack_queue',
+  {
+    deckGroupId: text('deck_group_id').notNull(),
+    deckGroupOrder: integer('deck_group_order').notNull(),
+    deckSlot: integer('deck_slot').notNull(),
+    playerId: text('player_id').references(() => players.id),
+    groupId: text('group_id'),
+  },
+  (table) => [primaryKey({ columns: [table.deckGroupId, table.deckSlot] })],
+);
 
 export const finances = sqliteTable('finances', {
   id: integer('id').primaryKey(),

@@ -1,9 +1,10 @@
 import type { Player } from '../../../shared/types';
 import { PLAYERS_PER_COURT } from '../../../shared/constants';
+import { GROUP_MIME, isPlayerDrag, readDraggedPlayerId, setPlayerDragData } from '../../lib/drag';
 import { deckGroupLabel } from './displayUtils';
 
 interface DeckGroupCardProps {
-  players: Player[];
+  players: (Player | null)[];
   index: number;
   /** Global stack index of the first slot in this group card */
   baseStackIndex?: number;
@@ -32,9 +33,6 @@ interface DeckGroupCardProps {
   layout?: 'display' | 'admin';
 }
 
-const PLAYER_MIME = 'application/x-picklegrounds-player';
-const GROUP_MIME = 'application/x-picklegrounds-group';
-
 export function DeckGroupCard({
   players,
   index,
@@ -61,7 +59,7 @@ export function DeckGroupCard({
   const label = deckGroupLabel(index);
   const isNext = index === 0;
   const isAdmin = layout === 'admin';
-  const filledPlayers = players.filter(Boolean);
+  const filledPlayers = players.filter((p): p is Player => Boolean(p));
   const canKeepTogether =
     isAdmin && filledPlayers.length === 4 && !isLocked && onKeepTogether;
   const canDragGroup = isAdmin && Boolean(onReorderGroup);
@@ -70,15 +68,14 @@ export function DeckGroupCard({
   const isGroupDropTarget = dragOverGroupIndex === index && draggingGroupIndex !== index;
 
   function handlePlayerDragStart(e: React.DragEvent, playerId: string) {
-    e.dataTransfer.setData('text/plain', playerId);
-    e.dataTransfer.setData(PLAYER_MIME, playerId);
-    e.dataTransfer.effectAllowed = 'move';
+    setPlayerDragData(e, playerId);
     onDragPlayerStart?.(playerId);
   }
 
   function handlePlayerDragOver(e: React.DragEvent, stackIndex: number) {
     if (!canDragPlayer) return;
     if (e.dataTransfer.types.includes(GROUP_MIME)) return;
+    if (!isPlayerDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -90,11 +87,7 @@ export function DeckGroupCard({
     if (e.dataTransfer.types.includes(GROUP_MIME)) return;
     e.preventDefault();
     e.stopPropagation();
-    const playerId =
-      e.dataTransfer.getData(PLAYER_MIME) ||
-      e.dataTransfer.getData('text/plain') ||
-      draggingPlayerId ||
-      '';
+    const playerId = readDraggedPlayerId(e, draggingPlayerId) ?? '';
     onDragOverIndex?.(null);
     if (playerId) onReorderPlayer(playerId, toIndex);
   }
@@ -224,28 +217,28 @@ export function DeckGroupCard({
       )}
 
       <ul className={isAdmin ? 'space-y-1.5' : 'space-y-3'}>
-        {Array.from({ length: 4 }, (_, i) => {
-          const player = players[i];
+        {Array.from({ length: PLAYERS_PER_COURT }, (_, i) => {
+          const player = players[i] ?? null;
           const stackIndex = baseStackIndex + i;
-          const isDropTarget = canDragPlayer && player && dragOverIndex === stackIndex;
+          const isDropTarget = canDragPlayer && dragOverIndex === stackIndex;
           return (
             <li
-              key={player?.id ?? `empty-${i}`}
-              className={`flex items-center gap-2 min-w-0 rounded-md transition-colors ${
-                isDropTarget ? 'bg-pickle-green/15 ring-1 ring-pickle-green/40' : ''
+              key={player?.id ?? `empty-${index}-${i}`}
+              className={`flex items-center gap-2 min-w-0 rounded-md border transition-colors ${
+                isDropTarget
+                  ? 'bg-pickle-green/15 border-pickle-green/40'
+                  : player
+                    ? 'border-transparent'
+                    : 'border-dashed border-black/15'
               } ${canDragPlayer && player ? 'cursor-grab active:cursor-grabbing' : ''}`}
               draggable={canDragPlayer && Boolean(player)}
               onDragStart={player ? (e) => handlePlayerDragStart(e, player.id) : undefined}
-              onDragOver={player ? (e) => handlePlayerDragOver(e, stackIndex) : undefined}
-              onDragLeave={
-                canDragPlayer && player
-                  ? () => {
-                      if (dragOverIndex === stackIndex) onDragOverIndex?.(null);
-                    }
-                  : undefined
-              }
-              onDrop={player ? (e) => handlePlayerDrop(e, stackIndex) : undefined}
-              onDragEnd={canDragPlayer ? handlePlayerDragEnd : undefined}
+              onDragOver={(e) => handlePlayerDragOver(e, stackIndex)}
+              onDragLeave={() => {
+                if (dragOverIndex === stackIndex) onDragOverIndex?.(null);
+              }}
+              onDrop={(e) => handlePlayerDrop(e, stackIndex)}
+              onDragEnd={canDragPlayer && player ? handlePlayerDragEnd : undefined}
             >
               {canDragPlayer && player && (
                 <span
@@ -266,7 +259,11 @@ export function DeckGroupCard({
                   isAdmin ? 'text-sm' : 'text-lg xl:text-xl 2xl:text-2xl font-bold'
                 } ${player ? 'text-black' : 'text-black/25'}`}
               >
-                {player?.name ?? 'Open slot'}
+                {player?.name ?? (
+                  <span className={isAdmin ? 'italic' : ''}>
+                    {isAdmin ? 'Drop player here' : 'Open slot'}
+                  </span>
+                )}
               </span>
               {player && onRemovePlayer && (
                 <button

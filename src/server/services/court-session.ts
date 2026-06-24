@@ -1,13 +1,22 @@
 import { db } from '../db/client.js';
-import { courts, courtPlayers } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { courts, courtPlayers, players } from '../db/schema.js';
+import { eq, and, inArray } from 'drizzle-orm';
 import { removePlayerFromStack } from './stack-queue.js';
 import { MATCH_DURATION_MS, PLAYERS_PER_COURT } from '../../shared/constants.js';
-import type { CourtStatus, ReservationRate } from '../../shared/types.js';
+import type { CourtStatus, ReservationRate, SkillCategory } from '../../shared/types.js';
+import { assertSkillGroupAllowed } from '../../shared/skill.js';
 import {
   getNextReadyGroupPlayerIds,
   reshuffleDeck,
 } from './deck-matchmaker.js';
+
+function getSkillsForPlayerIds(playerIds: string[]): SkillCategory[] {
+  if (playerIds.length === 0) return [];
+  const playerRows = db.select().from(players).where(inArray(players.id, playerIds)).all();
+  return playerIds
+    .map((id) => playerRows.find((p) => p.id === id)?.skill as SkillCategory | undefined)
+    .filter((s): s is SkillCategory => Boolean(s));
+}
 
 export function getCourtPlayerIds(courtId: number): string[] {
   const rows = db.select().from(courtPlayers).where(eq(courtPlayers.courtId, courtId)).all();
@@ -27,6 +36,26 @@ export function removePlayersFromStack(playerIds: string[]) {
   for (const id of playerIds) {
     removePlayerFromStack(id);
   }
+}
+
+/** Block court for a private rental — no players required. */
+export function reserveCourt(courtId: number, reservationRate: ReservationRate = 'regular') {
+  const [court] = db.select().from(courts).where(eq(courts.id, courtId)).all();
+  if (!court) throw new Error('Court not found');
+  if (court.status !== 'Idle') throw new Error('Court must be idle');
+
+  db.update(courts)
+    .set({
+      status: 'Reserved',
+      matchEndsAt: null,
+      timerPaused: false,
+      timerRemainingSeconds: null,
+      reservationPaid: false,
+      reservationRate,
+    })
+    .where(eq(courts.id, courtId))
+    .run();
+  clearCourtPlayerSlots(courtId);
 }
 
 /** End open play / reserved session — court goes idle, slots cleared. */
@@ -89,7 +118,12 @@ export function assignPlayersToCourt(
   playerIds: string[],
   status: 'Occupied' | 'Reserved',
   reservationRate?: ReservationRate,
+  allowSkillMismatch = false,
 ) {
+  if (status === 'Occupied') {
+    assertSkillGroupAllowed(getSkillsForPlayerIds(playerIds), allowSkillMismatch);
+  }
+
   const endsAt = null;
 
   db.update(courts)
@@ -113,6 +147,67 @@ export function assignPlayersToCourt(
   }
 
   removePlayersFromStack(playerIds);
+}
+
+export function assignPlayerToCourtSlot(
+  courtId: number,
+  slot: number,
+  playerId: string,
+  allowSkillMismatch = false,
+) {
+  if (slot < 0 || slot >= PLAYERS_PER_COURT) {
+    throw new Error('Invalid slot');
+  }
+
+  const [court] = db.select().from(courts).where(eq(courts.id, courtId)).all();
+  if (!court) throw new Error('Court not found');
+  if (court.status !== 'Idle' && court.status !== 'Occupied') {
+    throw new Error('Court must be idle or occupied');
+  }
+
+  const [slotRow] = db
+    .select()
+    .from(courtPlayers)
+    .where(and(eq(courtPlayers.courtId, courtId), eq(courtPlayers.slot, slot)))
+    .all();
+  if (slotRow?.playerId) {
+    throw new Error('Slot is not empty');
+  }
+
+  const occupiedElsewhere = db
+    .select()
+    .from(courtPlayers)
+    .all()
+    .some((row) => row.playerId === playerId);
+  if (occupiedElsewhere) {
+    throw new Error('Player is already on a court');
+  }
+
+  if (court.status === 'Idle') {
+    db.update(courts)
+      .set({
+        status: 'Occupied',
+        matchEndsAt: null,
+        timerPaused: false,
+        timerRemainingSeconds: null,
+        reservationRate: null,
+        reservationPaid: false,
+      })
+      .where(eq(courts.id, courtId))
+      .run();
+  }
+
+  db.update(courtPlayers)
+    .set({ playerId })
+    .where(and(eq(courtPlayers.courtId, courtId), eq(courtPlayers.slot, slot)))
+    .run();
+
+  const courtPlayerIds = getCourtPlayerIds(courtId);
+  if (courtPlayerIds.length >= 2) {
+    assertSkillGroupAllowed(getSkillsForPlayerIds(courtPlayerIds), allowSkillMismatch);
+  }
+
+  removePlayerFromStack(playerId);
 }
 
 export function startCourtTimer(courtId: number) {

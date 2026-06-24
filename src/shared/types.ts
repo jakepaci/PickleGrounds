@@ -35,10 +35,16 @@ export interface Court {
   timerStarted: boolean;
 }
 
+export interface StackDeckGroup {
+  id: string;
+  slots: (Player | null)[];
+}
+
 export interface AppState {
   players: Player[];
   courts: Court[];
   stack: Player[];
+  stackGroups: StackDeckGroup[];
   finances: {
     totalIncome: number;
   };

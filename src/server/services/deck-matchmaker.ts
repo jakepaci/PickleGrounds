@@ -4,11 +4,7 @@ import { inArray } from 'drizzle-orm';
 import { PLAYERS_PER_COURT } from '../../shared/constants.js';
 import type { SkillCategory } from '../../shared/types.js';
 import { isValidSkillGroup } from '../../shared/skill.js';
-import {
-  getOrderedStackRows,
-  rebuildStackQueue,
-  type StackRow,
-} from './stack-queue.js';
+import { getDeckGroups, rebuildStackQueue, type StackRow } from './stack-queue.js';
 
 type PoolPlayer = { id: string; skill: SkillCategory; waitOrder: number };
 
@@ -46,33 +42,24 @@ export function buildSkillGroups(pool: PoolPlayer[]): PoolPlayer[][] {
   return [...full, ...partial];
 }
 
-function extractLockedBlocks(rows: StackRow[]): { blocks: StackRow[][]; loose: StackRow[] } {
+function extractLockedBlocks(groups: StackRow[][]): { blocks: StackRow[][]; loose: StackRow[] } {
   const blocks: StackRow[][] = [];
   const loose: StackRow[] = [];
-  const usedGroups = new Set<string>();
 
-  for (let i = 0; i < rows.length; ) {
-    const row = rows[i]!;
-    if (row.groupId && !usedGroups.has(row.groupId)) {
-      const block = rows.filter((r) => r.groupId === row.groupId);
-      if (block.length === PLAYERS_PER_COURT) {
-        blocks.push(block);
-        usedGroups.add(row.groupId);
-        i += block.length;
-        continue;
-      }
-      for (const r of block) {
-        loose.push({ ...r, groupId: null });
-      }
-      i += block.length;
+  for (const group of groups) {
+    const playersInGroup = group.filter((r) => r.playerId);
+    const lockId = group.find((r) => r.groupId)?.groupId;
+    if (
+      lockId &&
+      playersInGroup.length === PLAYERS_PER_COURT &&
+      group.every((r) => !r.playerId || r.groupId === lockId)
+    ) {
+      blocks.push(group);
       continue;
     }
-    if (row.groupId) {
-      i++;
-      continue;
+    for (const row of group) {
+      if (row.playerId) loose.push({ ...row, groupId: null });
     }
-    loose.push(row);
-    i++;
   }
 
   return { blocks, loose };
@@ -90,7 +77,7 @@ function mergeLockedAndShuffled(
 
   const lockedQueue = lockedBlocks.map((block) => ({
     block,
-    waitOrder: block[0]!.position,
+    waitOrder: block[0]!.deckGroupOrder,
   }));
 
   while (lockIdx < lockedQueue.length || looseIdx < shuffledLooseIds.length) {
@@ -101,7 +88,9 @@ function mergeLockedAndShuffled(
 
     if (takeLock) {
       for (const row of nextLock.block) {
-        result.push({ playerId: row.playerId, groupId: row.groupId });
+        if (row.playerId) {
+          result.push({ playerId: row.playerId, groupId: row.groupId });
+        }
       }
       lockIdx++;
       wait++;
@@ -118,10 +107,10 @@ function mergeLockedAndShuffled(
 
 /** Merge deck + returning players, regroup by skill rules, preserve locked foursomes. */
 export function reshuffleDeck(returningPlayerIds: string[] = []) {
-  const stackRows = getOrderedStackRows();
-  const { blocks: lockedBlocks, loose: looseRows } = extractLockedBlocks(stackRows);
+  const deckGroups = getDeckGroups();
+  const { blocks: lockedBlocks, loose: looseRows } = extractLockedBlocks(deckGroups);
 
-  const looseIds = [...looseRows.map((r) => r.playerId)];
+  const looseIds = [...looseRows.map((r) => r.playerId!)];
   for (const id of returningPlayerIds) {
     if (!looseIds.includes(id)) looseIds.push(id);
   }
@@ -143,27 +132,39 @@ export function reshuffleDeck(returningPlayerIds: string[] = []) {
     }));
 
   const shuffledLooseIds = buildSkillGroups(pool).flat().map((p) => p.id);
-  const groupIdByPlayer = new Map(looseRows.map((r) => [r.playerId, r.groupId]));
+  const groupIdByPlayer = new Map(
+    looseRows.filter((r) => r.playerId).map((r) => [r.playerId!, r.groupId]),
+  );
 
   const merged = mergeLockedAndShuffled(lockedBlocks, shuffledLooseIds, groupIdByPlayer);
   rebuildStackQueue(merged);
 }
 
-/** First complete skill-valid group at the front of the queue (full groups are queued first). */
+/** First skill-valid foursome in queue order (by deck group). */
 export function getNextReadyGroupPlayerIds(): string[] {
-  const stackRows = getOrderedStackRows();
-  if (stackRows.length < PLAYERS_PER_COURT) return [];
+  const deckGroups = getDeckGroups();
 
-  const firstFourIds = stackRows.slice(0, PLAYERS_PER_COURT).map((r) => r.playerId);
-  const playerRows = db.select().from(players).where(inArray(players.id, firstFourIds)).all();
-  const skillById = new Map(playerRows.map((p) => [p.id, p.skill as SkillCategory]));
+  for (const group of deckGroups) {
+    const playerIds = Array.from({ length: PLAYERS_PER_COURT }, (_, slot) => {
+      return group.find((r) => r.deckSlot === slot)?.playerId ?? null;
+    });
 
-  const group: PoolPlayer[] = firstFourIds.map((id, waitOrder) => ({
-    id,
-    skill: skillById.get(id)!,
-    waitOrder,
-  }));
+    if (playerIds.some((id) => !id)) continue;
 
-  if (!isValidGroup(group)) return [];
-  return firstFourIds;
+    const ids = playerIds as string[];
+    const playerRows = db.select().from(players).where(inArray(players.id, ids)).all();
+    const skillById = new Map(playerRows.map((p) => [p.id, p.skill as SkillCategory]));
+
+    const pool: PoolPlayer[] = ids.map((id, waitOrder) => ({
+      id,
+      skill: skillById.get(id)!,
+      waitOrder,
+    }));
+
+    if (pool.every((p) => p.skill) && isValidGroup(pool)) {
+      return ids;
+    }
+  }
+
+  return [];
 }

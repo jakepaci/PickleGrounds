@@ -1,10 +1,13 @@
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { DialogHost } from './components/DialogHost';
 import { DisplayView } from './views/DisplayView/DisplayView';
 import { AdminView } from './views/AdminView/AdminView';
 
 export function App() {
   return (
-    <Routes>
+    <>
+      <DialogHost />
+      <Routes>
       <Route path="/" element={<Navigate to="/display" replace />} />
       <Route path="/display" element={<DisplayView />} />
       <Route path="/admin" element={<AdminView />} />
@@ -25,5 +28,6 @@ export function App() {
         }
       />
     </Routes>
+    </>
   );
 }

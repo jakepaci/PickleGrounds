@@ -2,16 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { db } from '../db/client.js';
 import { players, stackQueue } from '../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { broadcastState } from '../services/broadcast.js';
 import { reshuffleDeck } from '../services/deck-matchmaker.js';
 import {
+  appendPlayerToStack,
+  insertStackGroup,
   lockStackGroup,
   moveDeckGroup,
   moveDeckGroupToIndex,
   removePlayerFromStack,
   reorderStackPlayer,
   unlockStackGroup,
+  vacateStackSlot,
 } from '../services/stack-queue.js';
 import { skillCategories, type SkillCategory } from '../../shared/types.js';
 import { PLAYERS_PER_COURT } from '../../shared/constants.js';
@@ -79,9 +82,7 @@ export async function playerRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Player already in stack' });
     }
 
-    const rows = db.select().from(stackQueue).orderBy(asc(stackQueue.position)).all();
-    const nextPosition = rows.length > 0 ? Math.max(...rows.map((r) => r.position)) + 1 : 0;
-    db.insert(stackQueue).values({ position: nextPosition, playerId: id }).run();
+    appendPlayerToStack(id);
 
     broadcastState();
     return { ok: true };
@@ -89,7 +90,7 @@ export async function playerRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/api/players/:id/stack', async (req) => {
     const { id } = req.params;
-    removePlayerFromStack(id);
+    vacateStackSlot(id);
     broadcastState();
     return { ok: true };
   });
@@ -159,17 +160,37 @@ export async function playerRoutes(app: FastifyInstance) {
     },
   );
 
-  app.post<{ Body: { playerIds: string[] } }>('/api/stack/keep-together', async (req, reply) => {
-    const { playerIds } = req.body;
-    if (playerIds.length !== PLAYERS_PER_COURT) {
-      return reply.code(400).send({ error: `Need exactly ${PLAYERS_PER_COURT} players` });
+  app.post<{ Body: { playerIds: string[]; allowSkillMismatch?: boolean } }>(
+    '/api/stack/keep-together',
+    async (req, reply) => {
+      const { playerIds, allowSkillMismatch = false } = req.body;
+      if (playerIds.length !== PLAYERS_PER_COURT) {
+        return reply.code(400).send({ error: `Need exactly ${PLAYERS_PER_COURT} players` });
+      }
+      try {
+        const result = lockStackGroup(playerIds, allowSkillMismatch);
+        broadcastState();
+        return { ok: true, ...result };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to lock group';
+        return reply.code(400).send({ error: message });
+      }
+    },
+  );
+
+  app.post<{
+    Body: { playerIds: string[]; allowSkillMismatch?: boolean; lockTogether?: boolean };
+  }>('/api/stack/insert-group', async (req, reply) => {
+    const { playerIds, allowSkillMismatch = false, lockTogether = false } = req.body;
+    if (!Array.isArray(playerIds) || playerIds.length === 0) {
+      return reply.code(400).send({ error: 'playerIds required' });
     }
     try {
-      const result = lockStackGroup(playerIds);
+      const result = insertStackGroup(playerIds, { allowSkillMismatch, lockTogether });
       broadcastState();
       return { ok: true, ...result };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to lock group';
+      const message = err instanceof Error ? err.message : 'Failed to add group';
       return reply.code(400).send({ error: message });
     }
   });

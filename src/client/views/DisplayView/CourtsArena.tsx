@@ -60,23 +60,31 @@ function CourtLabel({ courtNumber }: { courtNumber: 1 | 2 | 3 }) {
 
 function CourtGraphic({ court }: { court: Court }) {
   const isOccupied = court.status === "Occupied";
+  const isReserved = court.status === "Reserved";
   const timerStarted = court.timerStarted;
-  const display =
-    isOccupied && timerStarted
-      ? formatTime(court.secondsRemaining)
-      : isOccupied
-        ? `${formatTime(MATCH_DURATION_MS / 1000)} · READY`
-        : "15:00";
+  const hasPlayers = court.players.some((slot) => slot.player != null);
+
+  let centerLabel: string;
+
+  if (isReserved) {
+    centerLabel = "RESERVED";
+  } else if (isOccupied && timerStarted) {
+    centerLabel = court.timerPaused
+      ? `${formatTime(court.secondsRemaining)} · PAUSED`
+      : formatTime(court.secondsRemaining);
+  } else if (isOccupied) {
+    centerLabel = `${formatTime(MATCH_DURATION_MS / 1000)} · READY`;
+  } else {
+    centerLabel = "OPEN";
+  }
 
   return (
     <div className="h-full min-h-0 w-full min-w-0 px-[1.5%] flex flex-col">
       <CourtVisualizer
         players={court.players}
-        timer={
-          court.timerPaused
-            ? `${formatTime(court.secondsRemaining)} · PAUSED`
-            : display
-        }
+        centerLabel={centerLabel}
+        variant={isReserved ? "reserved" : "play"}
+        showPlayers={!isReserved || hasPlayers}
         className="block w-full h-full flex-1 min-h-0"
       />
     </div>

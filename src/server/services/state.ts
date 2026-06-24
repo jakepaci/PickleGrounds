@@ -1,8 +1,23 @@
-import type { AppState, Court, Player } from '../../shared/types.js';
+import type { AppState, Court, Player, StackDeckGroup } from '../../shared/types.js';
 import { PLAYERS_PER_COURT } from '../../shared/constants.js';
 import { db } from '../db/client.js';
-import { players, courts, courtPlayers, stackQueue, finances } from '../db/schema.js';
+import { players, courts, courtPlayers, finances } from '../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
+import { getDeckGroups } from './stack-queue.js';
+
+function toPlayer(
+  p: { id: string; name: string; skill: string; paid: boolean; createdAt: Date },
+  stackGroupId?: string | null,
+): Player {
+  return {
+    id: p.id,
+    name: p.name,
+    skill: p.skill as Player['skill'],
+    paid: p.paid,
+    createdAt: p.createdAt.toISOString(),
+    ...(stackGroupId != null ? { stackGroupId } : {}),
+  };
+}
 
 export function loadAppState(): AppState {
   const allPlayers = db.select().from(players).all();
@@ -48,31 +63,28 @@ export function loadAppState(): AppState {
     };
   });
 
-  const stackRows = db.select().from(stackQueue).orderBy(asc(stackQueue.position)).all();
-  const stack = stackRows
-    .map((r) => playerMap.get(r.playerId))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      skill: p.skill as Player['skill'],
-      paid: p.paid,
-      createdAt: p.createdAt.toISOString(),
-      stackGroupId: stackRows.find((r) => r.playerId === p.id)?.groupId ?? null,
-    }));
+  const stackGroups: StackDeckGroup[] = getDeckGroups().map((group) => {
+    const slots = Array.from({ length: PLAYERS_PER_COURT }, (_, deckSlot) => {
+      const row = group.find((r) => r.deckSlot === deckSlot);
+      if (!row?.playerId) return null;
+      const p = playerMap.get(row.playerId);
+      return p ? toPlayer(p, row.groupId) : null;
+    });
+
+    return { id: group[0]!.deckGroupId, slots };
+  });
+
+  const stack = stackGroups.flatMap((g) =>
+    g.slots.filter((p): p is Player => p != null),
+  );
 
   const [fin] = db.select().from(finances).where(eq(finances.id, 1)).all();
 
   return {
-    players: allPlayers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      skill: p.skill as Player['skill'],
-      paid: p.paid,
-      createdAt: p.createdAt.toISOString(),
-    })),
+    players: allPlayers.map((p) => toPlayer(p)),
     courts: courtsState,
     stack,
+    stackGroups,
     finances: { totalIncome: fin?.totalIncome ?? 0 },
     serverTime: new Date().toISOString(),
   };

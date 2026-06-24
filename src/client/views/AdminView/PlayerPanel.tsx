@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../lib/api';
+import { setPlayerDragData } from '../../lib/drag';
+import { showAlert, showConfirm } from '../../lib/dialog';
 import { useAppStore } from '../../store/appStore';
+import { useUiStore } from '../../store/uiStore';
 import { skillCategories, type Player, type SkillCategory } from '../../../shared/types';
 
 const panelClass = 'bg-white rounded-lg border border-black/10 p-4 shadow-sm';
@@ -38,6 +41,9 @@ export function PlayerPanel() {
   const [search, setSearch] = useState('');
   const [paidFilter, setPaidFilter] = useState<PaidFilter>('all');
   const [skillFilter, setSkillFilter] = useState<SkillFilter>('all');
+
+  const draftPlayerIds = useUiStore((s) => s.draftPlayerIds);
+  const draftIdSet = useMemo(() => new Set(draftPlayerIds), [draftPlayerIds]);
 
   const stackOrder = useMemo(() => {
     const map = new Map<string, number>();
@@ -97,7 +103,7 @@ export function PlayerPanel() {
         await api.post(`/api/players/${player.id}/mark-paid`);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update paid status');
+      await showAlert(err instanceof Error ? err.message : 'Failed to update paid status', 'Error');
     }
   }
 
@@ -105,12 +111,17 @@ export function PlayerPanel() {
     try {
       await api.post(`/api/players/${playerId}/stack`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed');
+      await showAlert(err instanceof Error ? err.message : 'Failed', 'Error');
     }
   }
 
   async function removePlayer(playerId: string) {
-    if (!confirm('Remove this player?')) return;
+    const ok = await showConfirm('Remove this player?', {
+      title: 'Remove player',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!ok) return;
     await api.delete(`/api/players/${playerId}`);
   }
 
@@ -213,6 +224,10 @@ export function PlayerPanel() {
           ))}
         </div>
 
+        <p className="text-xs text-black/45 mb-3 shrink-0">
+          Drag players onto empty court slots or open deck slots, or use + Stack.
+        </p>
+
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1.5 -mx-1 px-1 pb-1">
           {players.length === 0 ? (
             <p className="text-black/45 text-sm py-4 text-center">No players yet.</p>
@@ -224,6 +239,7 @@ export function PlayerPanel() {
                 key={p.id}
                 player={p}
                 inStack={stackIds.has(p.id)}
+                inDraft={draftIdSet.has(p.id)}
                 courtId={courtByPlayerId.get(p.id)}
                 onTogglePaid={() => togglePaid(p)}
                 onAddToStack={() => addToStack(p.id)}
@@ -250,6 +266,7 @@ function SkillBadge({ skill, className = '' }: { skill: SkillCategory; className
 function PlayerRow({
   player,
   inStack,
+  inDraft,
   courtId,
   onTogglePaid,
   onAddToStack,
@@ -257,13 +274,28 @@ function PlayerRow({
 }: {
   player: Player;
   inStack: boolean;
+  inDraft: boolean;
   courtId?: 1 | 2 | 3;
   onTogglePaid: () => void;
   onAddToStack: () => void;
   onRemove: () => void;
 }) {
+  const draggingPlayerId = useUiStore((s) => s.draggingPlayerId);
+  const setDraggingPlayerId = useUiStore((s) => s.setDraggingPlayerId);
   const onCourt = courtId != null;
-  const canStack = !inStack && !onCourt;
+  const isDragging = draggingPlayerId === player.id;
+  const canStack = !inStack && !onCourt && !inDraft && !isDragging;
+  const canDrag = !onCourt;
+
+  function handleDragStart(e: React.DragEvent) {
+    if (!canDrag) return;
+    setPlayerDragData(e, player.id);
+    setDraggingPlayerId(player.id);
+  }
+
+  function handleDragEnd() {
+    setDraggingPlayerId(null);
+  }
 
   return (
     <div
@@ -277,11 +309,24 @@ function PlayerRow({
               : 'bg-white border-black/10'
       }`}
     >
-      <span
-        className={`w-2 h-2 rounded-full shrink-0 ${
-          onCourt ? 'bg-pickle-green' : inStack ? 'bg-pickle-orange' : player.paid ? 'bg-pickle-green' : 'bg-black/25'
-        }`}
-      />
+      {canDrag ? (
+        <span
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          className="text-black/30 text-xs select-none shrink-0 w-4 text-center cursor-grab active:cursor-grabbing"
+          title="Drag to court slot"
+          aria-label={`Drag ${player.name} to court`}
+        >
+          ⋮⋮
+        </span>
+      ) : (
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${
+            onCourt ? 'bg-pickle-green' : inStack ? 'bg-pickle-orange' : player.paid ? 'bg-pickle-green' : 'bg-black/25'
+          }`}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -296,7 +341,12 @@ function PlayerRow({
               Court {courtId}
             </span>
           )}
-          {!onCourt && inStack && (
+          {!onCourt && inDraft && (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-pickle-green shrink-0">
+              New group
+            </span>
+          )}
+          {!onCourt && inStack && !inDraft && (
             <span className="text-[10px] font-bold uppercase tracking-wide text-pickle-orange shrink-0">
               In deck
             </span>
@@ -325,11 +375,15 @@ function PlayerRow({
           onClick={onAddToStack}
           disabled={!canStack}
           title={
-            onCourt
-              ? `On court ${courtId}`
-              : inStack
-                ? 'Already in the deck'
-                : 'Add to deck'
+            isDragging
+              ? 'Dragging to queue'
+              : onCourt
+                ? `On court ${courtId}`
+                : inDraft
+                  ? 'In new group draft'
+                  : inStack
+                    ? 'Already in the deck'
+                    : 'Add to deck'
           }
           className="px-2 py-0.5 rounded bg-pickle-orange hover:bg-pickle-orange/90 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium text-white border border-pickle-orange"
         >

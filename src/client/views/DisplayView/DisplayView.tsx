@@ -3,17 +3,16 @@ import { useAppStore } from '../../store/appStore';
 import { DisplayHeader } from './DisplayHeader';
 import { CourtsArena } from './CourtsArena';
 import { DeckSection } from './DeckSection';
-import { chunkIntoGroups } from './displayUtils';
 
 export function DisplayView() {
   useRealtimeState();
-  const { courts, stack } = useAppStore((s) => s.state);
+  const { courts, stack, stackGroups } = useAppStore((s) => s.state);
   const connected = useAppStore((s) => s.connected);
 
   const activeCourts = courts.filter(
     (c) => c.status === 'Occupied' || c.status === 'Reserved',
   ).length;
-  const deckGroups = chunkIntoGroups(stack).length;
+  const deckGroups = stackGroups.filter((g) => g.slots.some((p) => p != null)).length;
 
   const courtSlots = ([1, 2, 3] as const).map(
     (id) => courts.find((c) => c.id === id) ?? null,
@@ -29,7 +28,7 @@ export function DisplayView() {
 
       <CourtsArena courts={courtSlots} />
 
-      <DeckSection stack={stack} />
+      <DeckSection stackGroups={stackGroups} waitingCount={stack.length} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ const emptyState: AppState = {
   players: [],
   courts: [],
   stack: [],
+  stackGroups: [],
   finances: { totalIncome: 0 },
   serverTime: new Date().toISOString(),
 };

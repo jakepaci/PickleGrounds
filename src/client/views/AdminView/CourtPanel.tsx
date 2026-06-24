@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { isPlayerDrag, readDraggedPlayerId } from '../../lib/drag';
+import { showAlert, showConfirm } from '../../lib/dialog';
+import { confirmSkillMismatchIfNeeded } from '../../lib/skillConfirm';
 import { useAppStore } from '../../store/appStore';
-import {
-  formatPeso,
-  getReservationHourlyRate,
-  MATCH_DURATION_MS,
-  PLAYERS_PER_COURT,
-  RESERVATION_DURATION_HOURS,
-} from '../../../shared/constants';
-import type { Court, ReservationRate } from '../../../shared/types';
+import { MATCH_DURATION_MS, PLAYERS_PER_COURT } from '../../../shared/constants';
+import type { Court } from '../../../shared/types';
 
 const panelClass = 'bg-white rounded-lg border border-black/10 p-4 shadow-sm';
 const inputClass =
@@ -34,12 +31,16 @@ async function fillFromDeckWithReshuffleOption(courtId: number) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fill from deck';
     if (!message.toLowerCase().includes(INCOMPATIBLE_GROUP_HINT)) {
-      alert(message);
+      await showAlert(message, 'Could not fill court');
       return;
     }
 
-    const shouldReshuffle = confirm(
+    const shouldReshuffle = await showConfirm(
       'Next Up does not have a compatible group of 4 (max one skill tier apart).\n\nReshuffle the deck by skill and fill this court?',
+      {
+        title: 'Reshuffle deck?',
+        confirmLabel: 'Reshuffle & fill',
+      },
     );
     if (!shouldReshuffle) return;
 
@@ -47,16 +48,12 @@ async function fillFromDeckWithReshuffleOption(courtId: number) {
       await api.post('/api/stack/reshuffle');
       await tryFillFromDeck(courtId);
     } catch (retryErr) {
-      alert(retryErr instanceof Error ? retryErr.message : 'Could not fill after reshuffle');
+      await showAlert(
+        retryErr instanceof Error ? retryErr.message : 'Could not fill after reshuffle',
+        'Could not fill court',
+      );
     }
   }
-}
-
-function reservationRateLabel(rate: ReservationRate) {
-  const hourly = getReservationHourlyRate(rate);
-  return rate === 'peak'
-    ? `Peak — ${formatPeso(hourly)}/hr`
-    : `Regular — ${formatPeso(hourly)}/hr`;
 }
 
 function CourtCard({ court }: { court: Court }) {
@@ -64,10 +61,9 @@ function CourtCard({ court }: { court: Court }) {
   const stackCount = useAppStore((s) => s.state.stack.length);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [status, setStatus] = useState<'Reserved' | 'Occupied'>('Occupied');
-  const [reservationRate, setReservationRate] = useState<ReservationRate>('regular');
   const [manualAssignOpen, setManualAssignOpen] = useState(false);
-
-  const activeReservationRate = court.reservationRate ?? 'regular';
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
+  const canDropPlayers = court.status === 'Idle' || court.status === 'Occupied';
   const canFillFromDeck = stackCount >= PLAYERS_PER_COURT;
   const isIdle = court.status === 'Idle';
   const isActive = court.status === 'Occupied' || court.status === 'Reserved';
@@ -92,26 +88,65 @@ function CourtCard({ court }: { court: Court }) {
 
   async function assign() {
     if (selectedIds.length !== PLAYERS_PER_COURT) {
-      alert(`Select exactly ${PLAYERS_PER_COURT} players`);
+      await showAlert(`Select exactly ${PLAYERS_PER_COURT} players`, 'Select players');
       return;
     }
-    await api.post(`/api/courts/${court.id}/assign`, {
-      playerIds: selectedIds,
-      status,
-      ...(status === 'Reserved' ? { reservationRate } : {}),
-    });
-    setManualAssignOpen(false);
-    setSelectedIds([]);
+
+    let allowSkillMismatch = false;
+    if (status === 'Occupied') {
+      const skills = selectedIds.map(
+        (id) => players.find((p) => p.id === id)!.skill,
+      );
+      const mismatch = await confirmSkillMismatchIfNeeded(skills);
+      if (!mismatch.proceed) return;
+      allowSkillMismatch = mismatch.allowSkillMismatch;
+    }
+
+    try {
+      await api.post(`/api/courts/${court.id}/assign`, {
+        playerIds: selectedIds,
+        status,
+        allowSkillMismatch,
+      });
+      setManualAssignOpen(false);
+      setSelectedIds([]);
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Failed to assign players', 'Error');
+    }
+  }
+
+  async function reserveCourt() {
+    try {
+      await api.post(`/api/courts/${court.id}/reserve`, {});
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Failed to reserve court', 'Error');
+    }
+  }
+
+  async function markReservationPaid() {
+    try {
+      await api.post(`/api/courts/${court.id}/mark-paid`);
+    } catch (err) {
+      await showAlert(
+        err instanceof Error ? err.message : 'Failed to mark reservation paid',
+        'Error',
+      );
+    }
   }
 
   async function endGame() {
     if (isOccupied) {
-      const ok = confirm(
+      const ok = await showConfirm(
         `End game on court ${court.id}? Players return to the deck and groups are reshuffled.`,
+        { title: 'End game', confirmLabel: 'End game', destructive: true },
       );
       if (!ok) return;
     } else if (court.status === 'Reserved') {
-      const ok = confirm(`End reservation on court ${court.id}?`);
+      const ok = await showConfirm(`End reservation on court ${court.id}?`, {
+        title: 'End reservation',
+        confirmLabel: 'End reservation',
+        destructive: true,
+      });
       if (!ok) return;
     }
     await api.post(`/api/courts/${court.id}/end-game`);
@@ -122,7 +157,12 @@ function CourtCard({ court }: { court: Court }) {
   }
 
   async function clearCourt() {
-    if (!confirm(`Clear court ${court.id}?`)) return;
+    const ok = await showConfirm(`Clear court ${court.id}?`, {
+      title: 'Clear court',
+      confirmLabel: 'Clear',
+      destructive: true,
+    });
+    if (!ok) return;
     await api.post(`/api/courts/${court.id}/clear`);
     setManualAssignOpen(false);
     setSelectedIds([]);
@@ -132,7 +172,7 @@ function CourtCard({ court }: { court: Court }) {
     try {
       await api.post(`/api/courts/${court.id}/start-timer`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to start timer');
+      await showAlert(err instanceof Error ? err.message : 'Failed to start timer', 'Error');
     }
   }
 
@@ -140,7 +180,7 @@ function CourtCard({ court }: { court: Court }) {
     try {
       await api.post(`/api/courts/${court.id}/pause-timer`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to pause timer');
+      await showAlert(err instanceof Error ? err.message : 'Failed to pause timer', 'Error');
     }
   }
 
@@ -148,8 +188,46 @@ function CourtCard({ court }: { court: Court }) {
     try {
       await api.post(`/api/courts/${court.id}/resume-timer`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to resume timer');
+      await showAlert(err instanceof Error ? err.message : 'Failed to resume timer', 'Error');
     }
+  }
+
+  async function assignPlayerToSlot(slot: number, playerId: string) {
+    const existingIds = court.players
+      .map((s) => s.player?.id)
+      .filter((id): id is string => Boolean(id));
+    const allIds = [...existingIds, playerId];
+    let allowSkillMismatch = false;
+
+    if (allIds.length >= 2) {
+      const skills = allIds.map((id) => players.find((p) => p.id === id)!.skill);
+      const mismatch = await confirmSkillMismatchIfNeeded(skills);
+      if (!mismatch.proceed) return;
+      allowSkillMismatch = mismatch.allowSkillMismatch;
+    }
+
+    try {
+      await api.post(`/api/courts/${court.id}/slot`, { slot, playerId, allowSkillMismatch });
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Failed to assign player', 'Error');
+    }
+  }
+
+  function handleSlotDragOver(e: React.DragEvent, slot: number, isEmpty: boolean) {
+    if (!canDropPlayers || !isEmpty || !isPlayerDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverSlot(slot);
+  }
+
+  function handleSlotDrop(e: React.DragEvent, slot: number, isEmpty: boolean) {
+    if (!canDropPlayers || !isEmpty) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverSlot(null);
+    const playerId = readDraggedPlayerId(e);
+    if (playerId) void assignPlayerToSlot(slot, playerId);
   }
 
   return (
@@ -205,33 +283,76 @@ function CourtCard({ court }: { court: Court }) {
       )}
 
       {court.status === 'Reserved' && (
-        <p className="text-xs text-black/55 mb-3">
-          {reservationRateLabel(activeReservationRate)} · {RESERVATION_DURATION_HOURS} hr
-        </p>
+        <div className="mb-3">
+          {court.reservationPaid ? (
+            <p className="text-xs font-semibold text-pickle-green">Reservation paid ✓</p>
+          ) : (
+            <button
+              type="button"
+              onClick={markReservationPaid}
+              className="w-full text-sm px-3 py-2 rounded bg-pickle-orange hover:bg-pickle-orange/90 font-semibold text-white"
+            >
+              Mark reservation paid
+            </button>
+          )}
+        </div>
       )}
 
       {isIdle && (
-        <button
-          type="button"
-          onClick={fillFromDeck}
-          disabled={!canFillFromDeck}
-          title={
-            canFillFromDeck
-              ? 'Assign the next compatible group from the deck'
-              : `Need at least ${PLAYERS_PER_COURT} players in the deck`
-          }
-          className="mb-3 w-full text-sm px-3 py-2 rounded bg-pickle-orange hover:bg-pickle-orange/90 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-white"
-        >
-          Fill from Next Up
-        </button>
+        <div className="mb-3 space-y-2">
+          <button
+            type="button"
+            onClick={fillFromDeck}
+            disabled={!canFillFromDeck}
+            title={
+              canFillFromDeck
+                ? 'Assign the next compatible group from the deck'
+                : `Need at least ${PLAYERS_PER_COURT} players in the deck`
+            }
+            className="w-full text-sm px-3 py-2 rounded bg-pickle-orange hover:bg-pickle-orange/90 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-white"
+          >
+            Fill from Next Up
+          </button>
+
+          <button
+            type="button"
+            onClick={reserveCourt}
+            className="w-full text-sm px-3 py-2 rounded border-2 border-pickle-orange bg-pickle-orange/10 hover:bg-pickle-orange/15 font-semibold text-pickle-orange"
+          >
+            Reserve court
+          </button>
+        </div>
       )}
 
       <ul className="text-sm space-y-1 mb-3">
-        {court.players.map(({ slot, player }) => (
-          <li key={slot} className="text-black">
-            {slot + 1}. {player?.name ?? <span className="text-black/35">empty</span>}
-          </li>
-        ))}
+        {court.players.map(({ slot, player }) => {
+          const isEmpty = player == null;
+          const isDropTarget = canDropPlayers && isEmpty && dragOverSlot === slot;
+          return (
+            <li
+              key={slot}
+              className={`rounded-md px-2 py-1.5 border transition-colors ${
+                isDropTarget
+                  ? 'border-pickle-green bg-pickle-green/10 text-pickle-green'
+                  : isEmpty && canDropPlayers
+                    ? 'border-dashed border-black/20 text-black/45'
+                    : 'border-transparent text-black'
+              }`}
+              onDragOver={(e) => handleSlotDragOver(e, slot, isEmpty)}
+              onDragLeave={() => {
+                if (dragOverSlot === slot) setDragOverSlot(null);
+              }}
+              onDrop={(e) => handleSlotDrop(e, slot, isEmpty)}
+            >
+              {slot + 1}.{' '}
+              {player?.name ?? (
+                <span className={canDropPlayers ? 'italic' : ''}>
+                  {canDropPlayers ? 'Drop player here' : 'empty'}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       {isIdle && (
@@ -276,17 +397,6 @@ function CourtCard({ court }: { court: Court }) {
                   <option value="Reserved">Reserved (court rental)</option>
                 </select>
 
-                {status === 'Reserved' && (
-                  <select
-                    value={reservationRate}
-                    onChange={(e) => setReservationRate(e.target.value as ReservationRate)}
-                    className={inputClass}
-                  >
-                    <option value="regular">{reservationRateLabel('regular')}</option>
-                    <option value="peak">{reservationRateLabel('peak')}</option>
-                  </select>
-                )}
-
                 <button
                   type="button"
                   onClick={assign}
@@ -307,7 +417,7 @@ function CourtCard({ court }: { court: Court }) {
             onClick={endGame}
             className="text-xs px-3 py-1 rounded bg-pickle-orange hover:bg-pickle-orange/90 font-semibold text-white"
           >
-            End game
+            {court.status === 'Reserved' ? 'End reservation' : 'End game'}
           </button>
         )}
 
@@ -362,7 +472,8 @@ export function CourtPanel() {
     <section className={panelClass}>
       <h2 className="text-lg font-semibold mb-1 text-black">Courts</h2>
       <p className="text-xs text-black/45 mb-3">
-        Assign players, then start the timer when they are ready. End game reshuffles the deck.
+        Drag players from the roster or deck onto empty court slots. Start the timer when all four
+        spots are filled.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {courts.map((court) => (

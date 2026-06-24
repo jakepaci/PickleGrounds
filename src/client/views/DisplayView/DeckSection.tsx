@@ -1,14 +1,30 @@
-import type { Player } from '../../../shared/types';
-import { chunkIntoGroups } from './displayUtils';
+import { useEffect, useRef } from 'react';
+import type { Player, StackDeckGroup } from '../../../shared/types';
 import { DeckGroupCard } from './DeckGroupCard';
 
 interface DeckSectionProps {
-  stack: Player[];
+  stackGroups: StackDeckGroup[];
+  waitingCount: number;
 }
 
-export function DeckSection({ stack }: DeckSectionProps) {
-  const groups = chunkIntoGroups(stack);
-  const waitingCount = stack.length;
+export function DeckSection({ stackGroups, waitingCount }: DeckSectionProps) {
+  const groups = stackGroups.filter((g) => g.slots.some((p) => p != null));
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    function onWheel(e: WheelEvent) {
+      if (el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      el.scrollLeft += delta;
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [groups.length]);
 
   return (
     <section className="shrink-0 border-t border-black/[0.08] px-8 xl:px-10 py-3 bg-[#E1DBD8] font-sans">
@@ -34,11 +50,14 @@ export function DeckSection({ stack }: DeckSectionProps) {
           <p className="text-base font-bold text-black/30">No groups in the deck yet</p>
         </div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-1">
+        <div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto overflow-y-hidden pb-1 scroll-smooth"
+        >
           {groups.map((group, index) => (
             <DeckGroupCard
-              key={group.map((p) => p.id).join('-') || index}
-              players={group}
+              key={group.id}
+              players={group.slots.filter((p): p is Player => p != null)}
               index={index}
             />
           ))}

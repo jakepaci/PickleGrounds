@@ -1,3 +1,4 @@
+import './env.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
@@ -9,6 +10,7 @@ import { startCourtTimerLoop } from './services/court-timer.js';
 import { playerRoutes } from './routes/players.js';
 import { courtRoutes } from './routes/courts.js';
 import { financeRoutes } from './routes/finances.js';
+import { sessionRoutes } from './routes/session.js';
 import { loadAppState } from './services/state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +23,7 @@ async function main() {
   await app.register(playerRoutes);
   await app.register(courtRoutes);
   await app.register(financeRoutes);
+  await app.register(sessionRoutes);
 
   app.get('/api/state', async () => loadAppState());
 

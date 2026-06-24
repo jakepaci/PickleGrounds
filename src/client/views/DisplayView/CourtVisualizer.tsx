@@ -52,7 +52,10 @@ function PlayerCell({ text }: { text: string }) {
 
 interface CourtVisualizerProps {
   players: CourtPlayerSlot[];
-  timer: string;
+  centerLabel: string;
+  centerSub?: string;
+  variant?: 'play' | 'reserved';
+  showPlayers?: boolean;
   className?: string;
 }
 
@@ -60,7 +63,14 @@ interface CourtVisualizerProps {
  * Wireframe court on seamless green board — only the kitchen is filled.
  * Lines stretch to fill the cell; labels render as HTML so they stay crisp.
  */
-export function CourtVisualizer({ players, timer, className = '' }: CourtVisualizerProps) {
+export function CourtVisualizer({
+  players,
+  centerLabel,
+  centerSub,
+  variant = 'play',
+  showPlayers = true,
+  className = '',
+}: CourtVisualizerProps) {
   const playerLabel = (slot: number) => {
     const p = players.find((s) => s.slot === slot)?.player?.name;
     return p ?? `Player ${slot + 1}`;
@@ -121,23 +131,44 @@ export function CourtVisualizer({ players, timer, className = '' }: CourtVisuali
       </svg>
 
       <div className="pointer-events-none absolute inset-0 flex flex-col font-sans">
-        <div className="flex-[0.32] min-h-0 grid grid-cols-2 gap-x-3 px-[8%] pt-[5%]">
-          <PlayerCell text={playerLabel(0)} />
-          <PlayerCell text={playerLabel(2)} />
-        </div>
+        {showPlayers ? (
+          <>
+            <div className="flex-[0.32] min-h-0 grid grid-cols-2 gap-x-3 px-[8%] pt-[5%]">
+              <PlayerCell text={playerLabel(0)} />
+              <PlayerCell text={playerLabel(2)} />
+            </div>
 
-        <div className="flex-[0.36] shrink-0" aria-hidden />
+            <div className="flex-[0.36] shrink-0" aria-hidden />
 
-        <div className="flex-[0.32] min-h-0 grid grid-cols-2 gap-x-3 px-[8%] pb-[5%]">
-          <PlayerCell text={playerLabel(1)} />
-          <PlayerCell text={playerLabel(3)} />
-        </div>
+            <div className="flex-[0.32] min-h-0 grid grid-cols-2 gap-x-3 px-[8%] pb-[5%]">
+              <PlayerCell text={playerLabel(1)} />
+              <PlayerCell text={playerLabel(3)} />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1" aria-hidden />
+        )}
 
-        <p
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-bold tabular-nums tracking-tight text-white text-[clamp(1.35rem,2.4vw,2.375rem)] leading-none"
+        <div
+          className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center ${
+            variant === 'reserved' ? 'px-[6%]' : ''
+          }`}
         >
-          {timer}
-        </p>
+          <p
+            className={`font-bold tabular-nums tracking-tight text-white leading-none ${
+              variant === 'reserved'
+                ? 'uppercase tracking-[0.12em] text-[clamp(1.5rem,2.8vw,2.75rem)]'
+                : 'text-[clamp(1.35rem,2.4vw,2.375rem)]'
+            }`}
+          >
+            {centerLabel}
+          </p>
+          {centerSub && (
+            <p className="mt-1.5 font-semibold uppercase tracking-[0.14em] text-white/85 text-[clamp(0.65rem,1.1vw,0.95rem)]">
+              {centerSub}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,10 +7,12 @@ import { PLAYERS_PER_COURT, reservationRates } from '../../shared/constants.js';
 import { markCourtReservationPaid } from '../services/finances.js';
 import {
   assignPlayersToCourt,
+  assignPlayerToCourtSlot,
   endCourtSession,
   fillCourtFromDeck,
   pauseCourtTimer,
   processOpenPlayCourtEnd,
+  reserveCourt,
   resumeCourtTimer,
   startCourtTimer,
 } from '../services/court-session.js';
@@ -28,12 +30,44 @@ function parseCourtId(raw: string, reply: { code: (n: number) => { send: (b: unk
 export async function courtRoutes(app: FastifyInstance) {
   app.post<{
     Params: { id: string };
-    Body: { playerIds: string[]; status?: 'Reserved' | 'Occupied'; reservationRate?: ReservationRate };
+    Body: { reservationRate?: ReservationRate };
+  }>('/api/courts/:id/reserve', async (req, reply) => {
+    const courtId = parseCourtId(req.params.id, reply);
+    if (!courtId) return;
+
+    const { reservationRate = 'regular' } = req.body;
+    if (!reservationRates.includes(reservationRate)) {
+      return reply.code(400).send({ error: 'Invalid reservation rate' });
+    }
+
+    try {
+      reserveCourt(courtId, reservationRate);
+      broadcastState();
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reserve court';
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      playerIds: string[];
+      status?: 'Reserved' | 'Occupied';
+      reservationRate?: ReservationRate;
+      allowSkillMismatch?: boolean;
+    };
   }>('/api/courts/:id/assign', async (req, reply) => {
     const courtId = parseCourtId(req.params.id, reply);
     if (!courtId) return;
 
-    const { playerIds, status = 'Occupied', reservationRate = 'regular' } = req.body;
+    const {
+      playerIds,
+      status = 'Occupied',
+      reservationRate = 'regular',
+      allowSkillMismatch = false,
+    } = req.body;
 
     if (playerIds.length !== PLAYERS_PER_COURT) {
       return reply.code(400).send({ error: 'Exactly 4 players required' });
@@ -42,9 +76,36 @@ export async function courtRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Invalid reservation rate' });
     }
 
-    assignPlayersToCourt(courtId, playerIds, status, reservationRate);
-    broadcastState();
-    return { ok: true };
+    try {
+      assignPlayersToCourt(courtId, playerIds, status, reservationRate, allowSkillMismatch);
+      broadcastState();
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to assign players';
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { slot: number; playerId: string; allowSkillMismatch?: boolean };
+  }>('/api/courts/:id/slot', async (req, reply) => {
+    const courtId = parseCourtId(req.params.id, reply);
+    if (!courtId) return;
+
+    const { slot, playerId, allowSkillMismatch = false } = req.body;
+    if (typeof slot !== 'number' || !playerId) {
+      return reply.code(400).send({ error: 'slot and playerId are required' });
+    }
+
+    try {
+      assignPlayerToCourtSlot(courtId, slot, playerId, allowSkillMismatch);
+      broadcastState();
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to assign player';
+      return reply.code(400).send({ error: message });
+    }
   });
 
   app.post<{ Params: { id: string } }>('/api/courts/:id/clear', async (req, reply) => {
