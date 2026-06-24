@@ -52,7 +52,16 @@ async function main() {
   console.log(`Picklegrounds API at http://localhost:${port}`);
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    const port = process.env.PORT ?? 3000;
+    console.error(`\nPort ${port} is already in use.`);
+    console.error(
+      'Another copy of PickleGrounds may be running, or "npm run dev" is still open.',
+    );
+    console.error('Close that terminal or process, then start again.\n');
+  } else {
+    console.error(err);
+  }
   process.exit(1);
 });

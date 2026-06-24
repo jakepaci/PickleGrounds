@@ -98,6 +98,7 @@ If the computer fails, restoring this file restores your roster and history.
 | Problem | Try |
 |---------|-----|
 | `node` is not recognized | Install Node from nodejs.org (LTS installer, defaults); restart PC; run `install-once.bat` again |
+| Black window opens then closes | Port 3000 in use — close `npm run dev` or another PickleGrounds window; run `start-picklegrounds.bat` again |
 | Display says Offline / not updating | Restart `start-picklegrounds.bat`; check **Live** in admin |
 | Can’t open admin from another device | Same Wi‑Fi as facility PC; use PC’s IP; allow port 3000 in Windows Firewall |
 | “Not built yet” when starting | Run `install-once.bat` again |

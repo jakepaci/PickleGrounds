@@ -7,5 +7,5 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const envPath = path.join(root, '.env');
 
 if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
+  dotenv.config({ path: envPath, quiet: true });
 }
