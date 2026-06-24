@@ -10,13 +10,29 @@ Local pickleball facility management — court stacks, timers, and player roster
 
 ## Facility install (production)
 
-For the computer that runs at the facility. **No Cursor or VS Code needed.**
+For the computer that runs at the facility. **No Cursor, VS Code, or Git required.**
 
-### Windows (recommended)
+### 1. Get the project
 
-1. Copy this folder to the facility PC
-2. Double-click **`scripts\install-once.bat`** (once)
-3. Double-click **`scripts\start-picklegrounds.bat`** (each day, unless auto-start is configured)
+**From GitHub (recommended):**
+
+1. Open [github.com/jakepaci/PickleGrounds](https://github.com/jakepaci/PickleGrounds)
+2. Click **Code** → **Download ZIP**
+3. Extract the zip (e.g. to `C:\PickleGrounds`)
+4. Use the extracted folder as-is — it is the project root. You should see `package.json` and `scripts\` together in that folder (GitHub may name it `PickleGrounds-main`; renaming to `PickleGrounds` is fine).
+
+**Other options:** `git clone https://github.com/jakepaci/PickleGrounds.git`, or copy the same folder from a USB stick your installer provides.
+
+### 2. Install Node.js
+
+Download the **LTS** installer from [nodejs.org](https://nodejs.org), run with defaults, then restart the PC (or open a new terminal). Test with `node -v`.
+
+### 3. Install and run PickleGrounds
+
+Inside the project folder:
+
+1. Double-click **`scripts\install-once.bat`** (once, or again after updates)
+2. Double-click **`scripts\start-picklegrounds.bat`** (each day, unless auto-start is configured)
 
 Open in a browser:
 

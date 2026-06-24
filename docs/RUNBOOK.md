@@ -2,6 +2,37 @@
 
 Short guide for staff running PickleGrounds at the facility. No coding tools required.
 
+## Get the app onto the facility PC
+
+You need the **whole project folder** (the one that contains `package.json` and a `scripts` folder). You do **not** copy only `src` or another subfolder.
+
+### Option A — Download from GitHub (easiest)
+
+1. Open **https://github.com/jakepaci/PickleGrounds**
+2. Click the green **Code** button
+3. Click **Download ZIP**
+4. Extract the zip (e.g. to `C:\PickleGrounds`)
+5. You should see a folder like `PickleGrounds-main` — you can rename it to `PickleGrounds`
+6. Open that folder and confirm you see `package.json`, `scripts\`, and `docs\` in the same place
+
+### Option B — USB from your installer
+
+Your installer can copy the same folder to a USB drive. Put it anywhere on the PC (e.g. `C:\PickleGrounds`).
+
+### Install Node.js (once per PC)
+
+1. Go to **https://nodejs.org** and download the **LTS** Windows installer
+2. Run it and accept the **default** options (this adds Node to PATH automatically)
+3. Restart the PC, or close and reopen any terminal windows
+4. Optional check: open Command Prompt and run `node -v` — you should see a version number
+
+## First-time setup on the facility PC
+
+Inside the project folder (where `package.json` lives):
+
+1. Double-click **`scripts\install-once.bat`**
+2. Wait until it says **Install complete** (this needs internet the first time)
+
 ## Bookmarks
 
 Replace `YOUR-PC-IP` with the facility computer’s address (e.g. `192.168.1.50`).  
@@ -16,15 +47,13 @@ Pin these in the browser. Use full-screen (F11) on the display.
 
 ## Starting the app
 
-**First time only** (or after an update from your installer):
-
-1. Double-click `scripts\install-once.bat`
-2. Wait until it says “Install complete”
-
 **Every day** (if not set to auto-start):
 
-1. Double-click `scripts\start-picklegrounds.bat`
-2. Leave the window open — closing it stops the app
+1. Open the project folder
+2. Double-click **`scripts\start-picklegrounds.bat`**
+3. Leave the window open — closing it stops the app
+
+**After an update** (new zip from GitHub): run **`scripts\install-once.bat`** once, then start as usual.
 
 The admin header should show a green **Live** indicator when connected.
 
@@ -68,6 +97,7 @@ If the computer fails, restoring this file restores your roster and history.
 
 | Problem | Try |
 |---------|-----|
+| `node` is not recognized | Install Node from nodejs.org (LTS installer, defaults); restart PC; run `install-once.bat` again |
 | Display says Offline / not updating | Restart `start-picklegrounds.bat`; check **Live** in admin |
 | Can’t open admin from another device | Same Wi‑Fi as facility PC; use PC’s IP; allow port 3000 in Windows Firewall |
 | “Not built yet” when starting | Run `install-once.bat` again |
