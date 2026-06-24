@@ -1,22 +1,33 @@
 import { useState } from 'react';
 import { api } from '../../lib/api';
-import { showAlert } from '../../lib/dialog';
+import { showAlert, showConfirm } from '../../lib/dialog';
+
 interface StartSessionDialogProps {
   open: boolean;
   onClose: () => void;
+  onSessionStarted?: () => void;
 }
 
-export function StartSessionDialog({ open, onClose }: StartSessionDialogProps) {
-  const [removePlayers, setRemovePlayers] = useState(false);
+export function StartSessionDialog({ open, onClose, onSessionStarted }: StartSessionDialogProps) {
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
   async function handleStart() {
+    const ok = await showConfirm(
+      'This clears all courts, empties the deck, and removes every player from the roster.\n\nFinances totals are not reset.',
+      {
+        title: 'Start new session?',
+        confirmLabel: 'Start session',
+        destructive: true,
+      },
+    );
+    if (!ok) return;
+
     setLoading(true);
     try {
-      await api.post('/api/session/start-new', { removePlayers });
-      setRemovePlayers(false);
+      await api.post('/api/session/start-new');
+      onSessionStarted?.();
       onClose();
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Failed to start new session', 'Error');
@@ -27,7 +38,6 @@ export function StartSessionDialog({ open, onClose }: StartSessionDialogProps) {
 
   function handleClose() {
     if (loading) return;
-    setRemovePlayers(false);
     onClose();
   }
 
@@ -40,25 +50,13 @@ export function StartSessionDialog({ open, onClose }: StartSessionDialogProps) {
     >
       <div className="w-full max-w-md rounded-lg border border-black/10 bg-white p-5 shadow-lg">
         <h2 id="start-session-title" className="text-lg font-semibold text-black">
-          Start new session?
+          Start new session
         </h2>
         <p className="mt-2 text-sm text-black/60 leading-relaxed">
-          This clears all courts, empties the deck, and resets paid status for today&apos;s players.
-          Finances are not affected.
+          Use this at the start or end of a facility day. All courts go idle, the stack queue
+          empties, and the player roster is cleared. Paid flags reset with the roster. Finance
+          totals are kept.
         </p>
-
-        <label className="mt-4 flex items-start gap-2.5 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={removePlayers}
-            onChange={(e) => setRemovePlayers(e.target.checked)}
-            disabled={loading}
-            className="mt-0.5 rounded border-black/20 text-pickle-green focus:ring-pickle-green/40"
-          />
-          <span className="text-sm text-black/70">
-            Also remove all registered players from the roster
-          </span>
-        </label>
 
         <div className="mt-5 flex flex-wrap gap-2 justify-end">
           <button

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { api } from '../lib/api';
 import { useAppStore } from '../store/appStore';
-import type { WsMessage } from '../../shared/types';
+import type { AppState, WsMessage } from '../../shared/types';
 
 export function useRealtimeState() {
   const setState = useAppStore((s) => s.setState);
@@ -9,6 +10,17 @@ export function useRealtimeState() {
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    api
+      .get<AppState>('/api/state')
+      .then((state) => {
+        if (!cancelled) setState(state);
+      })
+      .catch(() => {
+        /* WebSocket will retry; avoid blocking the UI */
+      });
+
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
@@ -28,6 +40,7 @@ export function useRealtimeState() {
     connect();
 
     return () => {
+      cancelled = true;
       if (retryRef.current) clearTimeout(retryRef.current);
       wsRef.current?.close();
     };

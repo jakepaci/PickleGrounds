@@ -59,9 +59,8 @@ The admin header should show a green **Live** indicator when connected.
 
 ## Ending the day
 
-1. Open **Admin** → **Start new session**
-2. Choose whether to clear the player roster or keep names for next time
-3. Close the start window only after courts and queue are cleared
+1. Open **Admin** → **Start new session** → confirm
+2. All courts, the deck, and the player roster are cleared
 
 ## Daily workflow
 

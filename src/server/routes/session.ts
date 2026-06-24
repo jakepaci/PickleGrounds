@@ -3,8 +3,8 @@ import { broadcastState } from '../services/broadcast.js';
 import { startNewSession } from '../services/session.js';
 
 export async function sessionRoutes(app: FastifyInstance) {
-  app.post<{ Body: { removePlayers?: boolean } }>('/api/session/start-new', async (req) => {
-    startNewSession({ removePlayers: req.body?.removePlayers === true });
+  app.post('/api/session/start-new', async () => {
+    startNewSession();
     broadcastState();
     return { ok: true };
   });

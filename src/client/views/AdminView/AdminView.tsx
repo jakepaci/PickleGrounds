@@ -11,6 +11,7 @@ export function AdminView() {
   useRealtimeState();
   const connected = useAppStore((s) => s.connected);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [sessionKey, setSessionKey] = useState(0);
 
   return (
     <div className="min-h-screen bg-pickle-cream text-black font-sans antialiased">
@@ -52,12 +53,16 @@ export function AdminView() {
         </div>
       </header>
 
-      <StartSessionDialog open={sessionDialogOpen} onClose={() => setSessionDialogOpen(false)} />
+      <StartSessionDialog
+        open={sessionDialogOpen}
+        onClose={() => setSessionDialogOpen(false)}
+        onSessionStarted={() => setSessionKey((k) => k + 1)}
+      />
 
       <main className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4 max-w-[1600px] mx-auto xl:items-stretch">
         <PlayerPanel />
         <div className="flex flex-col min-h-0 xl:h-full">
-          <StackPanel />
+          <StackPanel key={sessionKey} />
         </div>
         <div className="xl:col-span-2">
           <CourtPanel />
